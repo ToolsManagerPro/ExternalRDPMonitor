@@ -1,0 +1,12 @@
+# Python files
+app.py
+requirements.txt
+runtime.txt
+streamlit_app.py
+*.py
+__pycache__/
+
+# Environment
+.env
+.env.local
+.env.production.local
