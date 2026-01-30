@@ -1,178 +1,258 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { MOCK_PACKS, ENTITIES, RDP_CONFIGS } from './constants';
-import { FilterState, RDPStats, Pack } from './types';
-import { StatsOverview } from './components/StatsOverview';
-import { FilterPanel } from './components/FilterPanel';
-import { RDPServerCards } from './components/RDPServerCards';
-import { PackStatusTable } from './components/PackStatusTable';
+# Page configuration
+st.set_page_config(
+    page_title="Status Pro Monitor",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-const App: React.FC = () => {
-  const [filters, setFilters] = useState<FilterState>({
-    entities: [],
-    rdpServers: []
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tempFilters, setTempFilters] = useState<FilterState>(filters);
-  const [lastUpdated, setLastUpdated] = useState(new Date().toLocaleTimeString());
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Pack | 'change'; direction: 'asc' | 'desc' }>({
-    key: 'name',
-    direction: 'asc'
-  });
+# Your data (matching your React constants)
+MOCK_PACKS = [
+    # Add your 35 pack entries here
+    {"name": "Pack17", "entity": "ECM4", "rdpServer": "144.126.129.103", 
+     "previous": {"ok": 369, "total": 2332, "notOk": 1963},
+     "current": {"ok": 673, "total": 2334, "notOk": 1661},
+     "platform": "iMACROS", "disk": "1.74 TB"},
+    # ... add all 35 packs
+]
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLastUpdated(new Date().toLocaleTimeString());
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+ENTITIES = ["ECM4", "ECM7", "ECM10"]
+RDP_SERVERS = ["144.126.129.103", "144.126.130.165", "144.91.119.93", 
+               "154.53.51.40", "161.97.145.244", "161.97.158.158",
+               "178.18.246.243", "178.18.246.248", "185.193.66.147",
+               "185.216.75.117", "194.163.130.102", "194.163.144.27",
+               "194.163.145.187", "207.244.243.33", "5.39.222.70",
+               "66.94.120.85", "66.94.123.3", "70.36.107.56"]
 
-  const filteredPacks = useMemo(() => {
-    return MOCK_PACKS.filter(pack => {
-      const entityMatch = filters.entities.length === 0 || filters.entities.includes(pack.entity);
-      const rdpMatch = filters.rdpServers.length === 0 || filters.rdpServers.includes(pack.rdpServer);
-      const searchMatch = searchQuery === '' || 
-        pack.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        pack.rdpServer.includes(searchQuery);
-      return entityMatch && rdpMatch && searchMatch;
-    }).sort((a, b) => {
-      let valA: any = a[sortConfig.key as keyof Pack];
-      let valB: any = b[sortConfig.key as keyof Pack];
-
-      if (sortConfig.key === 'change') {
-        valA = a.current.ok - a.previous.ok;
-        valB = b.current.ok - b.previous.ok;
-      } else if (typeof valA === 'object') {
-        valA = valA.ok; // Default to OK count for metrics objects
-        valB = valB.ok;
-      }
-
-      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [filters, searchQuery, sortConfig]);
-
-  const rdpStats = useMemo(() => {
-    const statsMap: Record<string, RDPStats> = {};
-    filteredPacks.forEach(pack => {
-      if (!statsMap[pack.rdpServer]) {
-        statsMap[pack.rdpServer] = {
-          ip: pack.rdpServer,
-          currentOk: 0,
-          previousOk: 0,
-          packCount: 0,
-          entityCount: 0,
-          change: 0,
-          storageCapacity: RDP_CONFIGS[pack.rdpServer]?.capacity || 'N/A'
-        };
-      }
-      const s = statsMap[pack.rdpServer];
-      s.currentOk += pack.current.ok;
-      s.previousOk += pack.previous.ok;
-      s.packCount += 1;
-      s.change = s.currentOk - s.previousOk;
-    });
-    return Object.values(statsMap).sort((a, b) => b.currentOk - a.currentOk);
-  }, [filteredPacks]);
-
-  const stats = useMemo(() => {
-    const current = filteredPacks.reduce((acc, p) => ({ ok: acc.ok + p.current.ok, total: acc.total + p.current.total }), { ok: 0, total: 0 });
-    return {
-      totalOk: current.ok,
-      packCount: filteredPacks.length,
-      rdpCount: new Set(filteredPacks.map(p => p.rdpServer)).size,
-      successRate: current.total > 0 ? (current.ok / current.total) * 100 : 0
-    };
-  }, [filteredPacks]);
-
-  return (
-    <div className="min-h-screen flex flex-col selection:bg-blue-600 selection:text-white bg-slate-50">
-      <header className="glass-header border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-[1440px] mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center space-x-5">
-            <div className="bg-slate-900 p-3 rounded-2xl text-white shadow-xl shadow-slate-200">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center space-x-3">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">Status Pro Monitor</h1>
-                <div className="flex items-center space-x-2 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                  <span className="flex h-1.5 w-1.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">System Live</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5">Console v3.1 • Updated {lastUpdated}</p>
-            </div>
-          </div>
-          
-          <div className="flex-1 max-w-md">
-            <div className="relative group">
-              <input 
-                type="text" 
-                placeholder="Find node or pack reference..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-100/50 border border-slate-200/50 rounded-2xl py-3 pl-11 pr-4 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
-              />
-              <svg className="w-5 h-5 absolute left-4 top-3 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-6 py-8">
-        <div className="flex flex-col lg:flex-row gap-10">
-          <aside className="w-full lg:w-80 flex-shrink-0">
-            <FilterPanel 
-              tempFilters={tempFilters}
-              setTempFilters={setTempFilters}
-              onApply={() => setFilters(tempFilters)}
-              onReset={() => { const r = { entities: [], rdpServers: [] }; setTempFilters(r); setFilters(r); }}
-              getCounts={(type, val) => MOCK_PACKS.filter(p => type === 'entity' ? p.entity === val : p.rdpServer === val).length}
-            />
-          </aside>
-
-          <div className="flex-1 min-w-0">
-            <div className="mb-6 flex flex-wrap gap-2">
-              {filters.entities.length > 0 && filters.entities.map(e => (
-                <div key={e} className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-blue-200">Entity: {e}</div>
-              ))}
-              {filters.rdpServers.length > 0 && filters.rdpServers.map(r => (
-                <div key={r} className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-slate-200">Node: {r}</div>
-              ))}
-            </div>
-            
-            <StatsOverview {...stats} />
-            <RDPServerCards stats={rdpStats} />
-            <PackStatusTable 
-              packs={filteredPacks} 
-              sortConfig={sortConfig} 
-              onSort={(key) => setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }))} 
-            />
-          </div>
-        </div>
-      </main>
-
-      <footer className="bg-white border-t border-slate-100 py-12 px-6 mt-16 text-center">
-        <div className="max-w-[1440px] mx-auto flex flex-col items-center space-y-4">
-          <div className="bg-slate-50 p-3 rounded-2xl mb-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.67.335a2 2 0 01-1.32.184l-2.59-.518a2 2 0 00-1.022.547l-1.013 1.014a2 2 0 00-.547 1.022l.518 2.59a2 2 0 00.184 1.32l.335.67a6 6 0 00.517 3.86l.477 2.387a2 2 0 00.547 1.022l1.014 1.013a2 2 0 00 1.022.547l2.59.518a2 2 0 00 1.32-.184l.67-.335a6 6 0 00 3.86-.517l2.387.477a2 2 0 00 1.022-.547l1.013-1.014a2 2 0 00.547-1.022l-.518-2.59a2 2 0 00-.184-1.32l-.335-.67a6 6 0 00-.517-3.86l-.477-2.387a2 2 0 00-.547-1.022l-1.014-1.013z" />
+def main():
+    # Header
+    col1, col2, col3 = st.columns([2, 3, 1])
+    with col1:
+        st.markdown("""
+        <div style='background-color: #0f172a; padding: 12px; border-radius: 16px; 
+                    color: white; display: inline-block; margin-bottom: 10px;'>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" 
+                 viewBox="0 0 24 24" stroke="currentColor" style='margin-right: 8px;'>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" 
+                      d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-          </div>
-          <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Proprietary Infrastructure Dashboard • Mission Critical Environment</p>
         </div>
-      </footer>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### Status Pro Monitor")
+        st.markdown("Console v3.1 • Updated " + datetime.now().strftime("%H:%M:%S"))
+    
+    with col2:
+        search_query = st.text_input(
+            "Find node or pack reference...",
+            placeholder="Search packs or RDP servers...",
+            label_visibility="collapsed"
+        )
+    
+    with col3:
+        st.markdown("""
+        <div style='background-color: #d1fae5; padding: 8px 12px; border-radius: 12px; 
+                    border: 1px solid #a7f3d0; display: inline-flex; align-items: center;'>
+            <span style='margin-right: 8px; position: relative;'>
+                <span style='position: absolute; height: 6px; width: 6px; background-color: #10b981; 
+                            border-radius: 50%; animation: ping 1s cubic-bezier(0,0,0.2,1) infinite;'></span>
+                <span style='height: 6px; width: 6px; background-color: #059669; border-radius: 50%; 
+                            position: relative; display: block;'></span>
+            </span>
+            <span style='font-size: 9px; font-weight: 900; color: #065f46; text-transform: uppercase; 
+                        letter-spacing: 0.2em;'>System Live</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Sidebar filters
+    with st.sidebar:
+        st.header("🔍 Filters")
+        
+        selected_entities = st.multiselect(
+            "Select Entities",
+            ENTITIES,
+            default=ENTITIES
+        )
+        
+        selected_rdps = st.multiselect(
+            "Select RDP Servers",
+            RDP_SERVERS,
+            default=RDP_SERVERS
+        )
+        
+        if st.button("Apply Filters", type="primary"):
+            st.rerun()
+        
+        if st.button("Reset Filters"):
+            selected_entities = ENTITIES
+            selected_rdps = RDP_SERVERS
+            st.rerun()
+    
+    # Convert to DataFrame for filtering
+    df = pd.DataFrame(MOCK_PACKS)
+    
+    # Apply filters
+    if selected_entities:
+        df = df[df['entity'].isin(selected_entities)]
+    if selected_rdps:
+        df = df[df['rdpServer'].isin(selected_rdps)]
+    if search_query:
+        df = df[df['name'].str.contains(search_query, case=False) | 
+                df['rdpServer'].str.contains(search_query)]
+    
+    # Display active filters
+    if selected_entities or selected_rdps:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if selected_entities:
+                for entity in selected_entities:
+                    st.markdown(f"<div style='background-color: #2563eb; color: white; font-size: 9px; "
+                                f"font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; "
+                                f"padding: 6px 12px; border-radius: 20px; display: inline-block; "
+                                f"margin-right: 8px; margin-bottom: 8px;'>Entity: {entity}</div>", 
+                                unsafe_allow_html=True)
+            if selected_rdps:
+                for rdp in selected_rdps:
+                    st.markdown(f"<div style='background-color: #0f172a; color: white; font-size: 9px; "
+                                f"font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; "
+                                f"padding: 6px 12px; border-radius: 20px; display: inline-block; "
+                                f"margin-right: 8px; margin-bottom: 8px;'>Node: {rdp}</div>", 
+                                unsafe_allow_html=True)
+    
+    # Stats Overview
+    st.subheader("📊 Overview")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        total_ok = df['current'].apply(lambda x: x['ok']).sum()
+        st.metric("Total OK", f"{total_ok:,}")
+    
+    with col2:
+        total_packs = len(df)
+        st.metric("Active Packs", total_packs)
+    
+    with col3:
+        unique_rdps = df['rdpServer'].nunique()
+        st.metric("RDP Servers", unique_rdps)
+    
+    with col4:
+        total_current = df['current'].apply(lambda x: x['total']).sum()
+        total_previous = df['previous'].apply(lambda x: x['total']).sum()
+        success_rate = (total_ok / total_current * 100) if total_current > 0 else 0
+        st.metric("Success Rate", f"{success_rate:.1f}%")
+    
+    st.divider()
+    
+    # RDP Server Cards
+    st.subheader("🖥️ RDP Server Performance")
+    
+    # Calculate RDP stats
+    rdp_stats = []
+    for rdp in df['rdpServer'].unique():
+        rdp_df = df[df['rdpServer'] == rdp]
+        current_ok = rdp_df['current'].apply(lambda x: x['ok']).sum()
+        previous_ok = rdp_df['previous'].apply(lambda x: x['ok']).sum()
+        change = current_ok - previous_ok
+        
+        rdp_stats.append({
+            'ip': rdp,
+            'currentOk': current_ok,
+            'previousOk': previous_ok,
+            'change': change,
+            'packCount': len(rdp_df),
+            'entityCount': rdp_df['entity'].nunique()
+        })
+    
+    # Sort by current OK descending
+    rdp_stats = sorted(rdp_stats, key=lambda x: x['currentOk'], reverse=True)
+    
+    # Display as cards
+    cols = st.columns(3)
+    for i, stat in enumerate(rdp_stats):
+        with cols[i % 3]:
+            with st.container(border=True):
+                st.markdown(f"**{stat['ip']}**")
+                
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.metric("Current OK", stat['currentOk'], delta=f"{stat['change']:+d}")
+                with col_b:
+                    st.metric("Packs", stat['packCount'])
+                
+                st.caption(f"{stat['entityCount']} entities")
+    
+    st.divider()
+    
+    # Pack Status Table
+    st.subheader("📋 Pack Details")
+    
+    # Prepare table data
+    table_data = []
+    for _, row in df.iterrows():
+        change = row['current']['ok'] - row['previous']['ok']
+        table_data.append({
+            'Pack': row['name'],
+            'Entity': row['entity'],
+            'RDP Server': row['rdpServer'],
+            'Platform': row['platform'],
+            'Disk': row['disk'],
+            'Previous OK': row['previous']['ok'],
+            'Current OK': row['current']['ok'],
+            'Change': change,
+            'Previous Not OK': row['previous']['notOk'],
+            'Current Not OK': row['current']['notOk']
+        })
+    
+    table_df = pd.DataFrame(table_data)
+    
+    # Display table
+    st.dataframe(
+        table_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Pack": st.column_config.TextColumn("Pack"),
+            "Entity": st.column_config.TextColumn("Entity"),
+            "RDP Server": st.column_config.TextColumn("RDP Server"),
+            "Platform": st.column_config.TextColumn("Platform"),
+            "Disk": st.column_config.TextColumn("Disk"),
+            "Previous OK": st.column_config.NumberColumn("Prev OK"),
+            "Current OK": st.column_config.NumberColumn("Curr OK"),
+            "Change": st.column_config.NumberColumn(
+                "Change",
+                format="%+d",
+                help="Change in OK count"
+            ),
+            "Previous Not OK": st.column_config.NumberColumn("Prev Not OK"),
+            "Current Not OK": st.column_config.NumberColumn("Curr Not OK")
+        }
+    )
+    
+    # Footer
+    st.divider()
+    st.markdown("""
+    <div style='text-align: center; padding: 24px;'>
+        <div style='background-color: #f8fafc; padding: 12px; border-radius: 16px; 
+                    display: inline-block; margin-bottom: 16px;'>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" 
+                 viewBox="0 0 24 24" stroke="currentColor" style='color: #cbd5e1;'>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.67.335a2 2 0 01-1.32.184l-2.59-.518a2 2 0 00-1.022.547l-1.013 1.014a2 2 0 00-.547 1.022l.518 2.59a2 2 0 00.184 1.32l.335.67a6 6 0 00.517 3.86l.477 2.387a2 2 0 00.547 1.022l1.014 1.013a2 2 0 00 1.022.547l2.59.518a2 2 0 00 1.32-.184l.67-.335a6 6 0 00 3.86-.517l2.387.477a2 2 0 00 1.022-.547l1.013-1.014a2 2 0 00.547-1.022l-.518-2.59a2 2 0 00-.184-1.32l-.335-.67a6 6 0 00-.517-3.86l-.477-2.387a2 2 0 00-.547-1.022l-1.014-1.013z"/>
+            </svg>
+        </div>
+        <p style='font-size: 10px; font-weight: 900; color: #cbd5e1; text-transform: uppercase; 
+                  letter-spacing: 0.4em;'>Proprietary Infrastructure Dashboard • Mission Critical Environment</p>
     </div>
-  );
-};
+    """, unsafe_allow_html=True)
 
-export default App;
+if __name__ == "__main__":
+    main()
