@@ -37,38 +37,52 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-fit sticky top-6">
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit sticky top-24">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="font-bold text-slate-800 text-lg">Filters</h3>
+        <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight">Filters</h3>
         <button 
           onClick={onReset}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+          className="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest transition-colors"
         >
-          Reset All
+          Reset
         </button>
       </div>
 
       <div className="space-y-6">
-        {/* Entities Filter */}
+        {/* Primary Action Button Moved to Top */}
+        <button 
+          onClick={onApply}
+          className="w-full bg-slate-900 hover:bg-blue-600 text-white font-black text-[11px] uppercase tracking-[0.2em] py-4 rounded-xl transition-all shadow-lg active:scale-[0.98] mb-4 flex items-center justify-center space-x-2"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Apply Selection</span>
+        </button>
+
+        <hr className="border-slate-50" />
+
+        {/* Entity Filter (Renamed from Entité) */}
         <div>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Entité</label>
-          <div className="space-y-2">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Entity Selection</label>
+          <div className="space-y-2.5">
             {ENTITIES.map(entity => {
               const count = getCounts('entity', entity);
+              const isActive = tempFilters.entities.includes(entity);
               return (
-                <label key={entity} className="flex items-center justify-between cursor-pointer group">
+                <label key={entity} className={`flex items-center justify-between cursor-pointer group p-2 rounded-lg transition-all ${isActive ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
                   <div className="flex items-center space-x-3">
                     <input 
                       type="checkbox"
-                      checked={tempFilters.entities.includes(entity)}
+                      checked={isActive}
                       onChange={() => toggleEntity(entity)}
                       className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-sm font-medium text-slate-700 group-hover:text-blue-600 transition-colors">
+                    <span className={`text-sm font-bold ${isActive ? 'text-blue-700' : 'text-slate-600'} group-hover:text-blue-600 transition-colors`}>
                       {entity}
                     </span>
                   </div>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-white border border-slate-100 text-slate-400 shadow-sm">
                     {count}
                   </span>
                 </label>
@@ -76,29 +90,28 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             })}
           </div>
         </div>
-
-        <hr className="border-slate-100" />
 
         {/* RDP Filter */}
         <div>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">RDP Server</label>
-          <div className="space-y-2">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">RDP Server Node</label>
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
             {RDP_SERVERS.map(rdp => {
               const count = getCounts('rdp', rdp);
+              const isActive = tempFilters.rdpServers.includes(rdp);
               return (
-                <label key={rdp} className="flex items-center justify-between cursor-pointer group">
+                <label key={rdp} className={`flex items-center justify-between cursor-pointer group p-2 rounded-lg transition-all ${isActive ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
                   <div className="flex items-center space-x-3">
                     <input 
                       type="checkbox"
-                      checked={tempFilters.rdpServers.includes(rdp)}
+                      checked={isActive}
                       onChange={() => toggleRDP(rdp)}
                       className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-sm font-medium text-slate-700 group-hover:text-blue-600 transition-colors">
+                    <span className={`text-[11px] font-bold ${isActive ? 'text-blue-700' : 'text-slate-600'} group-hover:text-blue-600 transition-colors`}>
                       {rdp}
                     </span>
                   </div>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-white border border-slate-100 text-slate-400 shadow-sm">
                     {count}
                   </span>
                 </label>
@@ -106,13 +119,6 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             })}
           </div>
         </div>
-
-        <button 
-          onClick={onApply}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
-        >
-          Apply Filters
-        </button>
       </div>
     </div>
   );

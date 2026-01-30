@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
-import { MOCK_PACKS, ENTITIES, RDP_SERVERS, RDP_CONFIGS } from './constants';
-import { FilterState, RDPStats } from './types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { MOCK_PACKS, ENTITIES, RDP_CONFIGS } from './constants';
+import { FilterState, RDPStats, Pack } from './types';
 import { StatsOverview } from './components/StatsOverview';
 import { FilterPanel } from './components/FilterPanel';
 import { RDPServerCards } from './components/RDPServerCards';
@@ -12,23 +12,49 @@ const App: React.FC = () => {
     entities: [],
     rdpServers: []
   });
-  
+  const [searchQuery, setSearchQuery] = useState('');
   const [tempFilters, setTempFilters] = useState<FilterState>(filters);
+  const [lastUpdated, setLastUpdated] = useState(new Date().toLocaleTimeString());
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Pack | 'change'; direction: 'asc' | 'desc' }>({
+    key: 'name',
+    direction: 'asc'
+  });
 
-  // Filter packs based on selection
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLastUpdated(new Date().toLocaleTimeString());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const filteredPacks = useMemo(() => {
     return MOCK_PACKS.filter(pack => {
       const entityMatch = filters.entities.length === 0 || filters.entities.includes(pack.entity);
       const rdpMatch = filters.rdpServers.length === 0 || filters.rdpServers.includes(pack.rdpServer);
-      return entityMatch && rdpMatch;
-    });
-  }, [filters]);
+      const searchMatch = searchQuery === '' || 
+        pack.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        pack.rdpServer.includes(searchQuery);
+      return entityMatch && rdpMatch && searchMatch;
+    }).sort((a, b) => {
+      let valA: any = a[sortConfig.key as keyof Pack];
+      let valB: any = b[sortConfig.key as keyof Pack];
 
-  // Aggregate stats by RDP server - Summing ALL packs for correct Total OK
+      if (sortConfig.key === 'change') {
+        valA = a.current.ok - a.previous.ok;
+        valB = b.current.ok - b.previous.ok;
+      } else if (typeof valA === 'object') {
+        valA = valA.ok; // Default to OK count for metrics objects
+        valB = valB.ok;
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filters, searchQuery, sortConfig]);
+
   const rdpStats = useMemo(() => {
     const statsMap: Record<string, RDPStats> = {};
-    
-    // Initialize stats map for all filtered IPs
     filteredPacks.forEach(pack => {
       if (!statsMap[pack.rdpServer]) {
         statsMap[pack.rdpServer] = {
@@ -42,110 +68,107 @@ const App: React.FC = () => {
         };
       }
       const s = statsMap[pack.rdpServer];
-      // Sum the OK counts from all packs on this server
       s.currentOk += pack.current.ok;
       s.previousOk += pack.previous.ok;
       s.packCount += 1;
       s.change = s.currentOk - s.previousOk;
     });
-
-    // Determine unique entities per RDP
-    Object.keys(statsMap).forEach(ip => {
-      const entitiesForRDP = new Set(filteredPacks.filter(p => p.rdpServer === ip).map(p => p.entity));
-      statsMap[ip].entityCount = entitiesForRDP.size;
-    });
-
-    // Sort by highest current OK count
     return Object.values(statsMap).sort((a, b) => b.currentOk - a.currentOk);
   }, [filteredPacks]);
 
-  const totalOk = useMemo(() => filteredPacks.reduce((sum, p) => sum + p.current.ok, 0), [filteredPacks]);
-  const activeRDPs = useMemo(() => new Set(filteredPacks.map(p => p.rdpServer)).size, [filteredPacks]);
-
-  const handleApplyFilters = () => {
-    setFilters(tempFilters);
-  };
-
-  const handleResetFilters = () => {
-    const reset = { entities: [], rdpServers: [] };
-    setTempFilters(reset);
-    setFilters(reset);
-  };
-
-  const getCounts = (type: 'entity' | 'rdp', value: string) => {
-    if (type === 'entity') {
-      return MOCK_PACKS.filter(p => p.entity === value).length;
-    }
-    return MOCK_PACKS.filter(p => p.rdpServer === value).length;
-  };
+  const stats = useMemo(() => {
+    const current = filteredPacks.reduce((acc, p) => ({ ok: acc.ok + p.current.ok, total: acc.total + p.current.total }), { ok: 0, total: 0 });
+    return {
+      totalOk: current.ok,
+      packCount: filteredPacks.length,
+      rdpCount: new Set(filteredPacks.map(p => p.rdpServer)).size,
+      successRate: current.total > 0 ? (current.ok / current.total) * 100 : 0
+    };
+  }, [filteredPacks]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-[1440px] mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
+    <div className="min-h-screen flex flex-col selection:bg-blue-600 selection:text-white bg-slate-50">
+      <header className="glass-header border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-[1440px] mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center space-x-5">
+            <div className="bg-slate-900 p-3 rounded-2xl text-white shadow-xl shadow-slate-200">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
             <div>
-              <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">RDP Pack Status Monitor</h1>
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Enterprise Console v2.6</p>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-xl font-black text-slate-900 tracking-tight">Status Pro Monitor</h1>
+                <div className="flex items-center space-x-2 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                  <span className="flex h-1.5 w-1.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">System Live</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5">Console v3.1 • Updated {lastUpdated}</p>
             </div>
           </div>
           
-          <div className="flex flex-wrap gap-2 items-center">
-            {filters.entities.length > 0 || filters.rdpServers.length > 0 ? (
-              <>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mr-1">Active Filters:</span>
-                {[...filters.entities, ...filters.rdpServers].map(f => (
-                  <span key={f} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold border border-blue-100 uppercase">
-                    {f}
-                  </span>
-                ))}
-              </>
-            ) : (
-              <span className="text-xs font-semibold text-slate-400 bg-slate-50 px-3 py-1 rounded-full">All Data Visible</span>
-            )}
+          <div className="flex-1 max-w-md">
+            <div className="relative group">
+              <input 
+                type="text" 
+                placeholder="Find node or pack reference..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-100/50 border border-slate-200/50 rounded-2xl py-3 pl-11 pr-4 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+              />
+              <svg className="w-5 h-5 absolute left-4 top-3 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-[1440px] mx-auto w-full px-6 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          <aside className="w-full lg:w-72 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row gap-10">
+          <aside className="w-full lg:w-80 flex-shrink-0">
             <FilterPanel 
               tempFilters={tempFilters}
               setTempFilters={setTempFilters}
-              onApply={handleApplyFilters}
-              onReset={handleResetFilters}
-              getCounts={getCounts}
+              onApply={() => setFilters(tempFilters)}
+              onReset={() => { const r = { entities: [], rdpServers: [] }; setTempFilters(r); setFilters(r); }}
+              getCounts={(type, val) => MOCK_PACKS.filter(p => type === 'entity' ? p.entity === val : p.rdpServer === val).length}
             />
           </aside>
 
           <div className="flex-1 min-w-0">
-            <StatsOverview 
-              totalOk={totalOk}
-              packCount={filteredPacks.length}
-              rdpCount={activeRDPs}
-            />
-
-            <RDPServerCards stats={rdpStats} />
+            <div className="mb-6 flex flex-wrap gap-2">
+              {filters.entities.length > 0 && filters.entities.map(e => (
+                <div key={e} className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-blue-200">Entity: {e}</div>
+              ))}
+              {filters.rdpServers.length > 0 && filters.rdpServers.map(r => (
+                <div key={r} className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-slate-200">Node: {r}</div>
+              ))}
+            </div>
             
-            <PackStatusTable packs={filteredPacks} />
+            <StatsOverview {...stats} />
+            <RDPServerCards stats={rdpStats} />
+            <PackStatusTable 
+              packs={filteredPacks} 
+              sortConfig={sortConfig} 
+              onSort={(key) => setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }))} 
+            />
           </div>
         </div>
       </main>
 
-      <footer className="bg-white border-t border-slate-200 py-8 px-6 mt-12">
-        <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row items-center justify-between text-slate-400 text-xs gap-4 font-medium uppercase tracking-wider">
-          <p>© 2024 Network Operations Center • System Health Dashboard</p>
-          <div className="flex items-center space-x-8">
-            <span className="flex items-center"><span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span> System Online</span>
-            <a href="#" className="hover:text-blue-600 transition-colors">Audit Logs</a>
-            <a href="#" className="hover:text-blue-600 transition-colors">Help Center</a>
+      <footer className="bg-white border-t border-slate-100 py-12 px-6 mt-16 text-center">
+        <div className="max-w-[1440px] mx-auto flex flex-col items-center space-y-4">
+          <div className="bg-slate-50 p-3 rounded-2xl mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.67.335a2 2 0 01-1.32.184l-2.59-.518a2 2 0 00-1.022.547l-1.013 1.014a2 2 0 00-.547 1.022l.518 2.59a2 2 0 00.184 1.32l.335.67a6 6 0 00.517 3.86l.477 2.387a2 2 0 00.547 1.022l1.014 1.013a2 2 0 00 1.022.547l2.59.518a2 2 0 00 1.32-.184l.67-.335a6 6 0 00 3.86-.517l2.387.477a2 2 0 00 1.022-.547l1.013-1.014a2 2 0 00.547-1.022l-.518-2.59a2 2 0 00-.184-1.32l-.335-.67a6 6 0 00-.517-3.86l-.477-2.387a2 2 0 00-.547-1.022l-1.014-1.013z" />
+            </svg>
           </div>
+          <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Proprietary Infrastructure Dashboard • Mission Critical Environment</p>
         </div>
       </footer>
     </div>
