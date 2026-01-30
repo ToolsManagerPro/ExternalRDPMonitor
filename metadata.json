@@ -1,0 +1,5 @@
+{
+  "name": "External RDP Monitor",
+  "description": "A comprehensive dashboard for monitoring pack statuses across multiple RDP servers with comparative performance metrics, dual-filter systems, and real-time visualization.",
+  "requestFramePermissions": []
+}
